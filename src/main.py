@@ -47,16 +47,15 @@ def main():
 def main_old():
     playwright = sync_playwright().start()
     browser = playwright.chromium.launch(headless=False)
-    auth_context_path = (
-        Path.home() / ".local/share/state_dl/browser_context.json"
-    ).resolve()
-    context = browser.new_context(storage_state=auth_context_path)
+    auth_path = (Path.home() / ".local/share/state_dl/browser_context.json").resolve()
+    context = browser.new_context(storage_state=auth_path if auth_path.exists() else None)
 
     page = context.new_page()
 
     page.goto("https://github.com/")
     input()
-    context.storage_state(path=auth_context_path)
+    auth_path.parent.mkdir(parents=True, exist_ok=True)
+    context.storage_state(path=auth_path)
     # page.wait_for_timeout(1000)
     context.close()
 
