@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "statement-downloader"
+name = "statement_downloader"
 version = "0.1.0"
 description = ""
 authors = ["Noah May <noahmouse2011@gmail.com>"]
@@ -24,3 +24,9 @@ ruff = "^0.0.274"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 95
+
+[tool.black]
+line-length = 95
