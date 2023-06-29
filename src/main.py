@@ -1,23 +1,21 @@
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from playwright.async_api import async_playwright
+from rich.syntax import Syntax
+from rich.text import Text, TextType
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Grid, Horizontal
+from textual.containers import Container, Horizontal
+from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
     Button,
-    Checkbox,
     ContentSwitcher,
     Footer,
     Input,
-    Label,
-    ListView,
-    OptionList,
     Static,
 )
 
@@ -121,6 +119,90 @@ class NewProcedure(Screen[TODOProcedure]):
         yield Static(f"New procedure! {self.snapshot}")
 
 
+class CollapsibleEditor(Static, can_focus=True):
+    BINDINGS = [Binding("space", "toggle", "Toggle code preview")]
+    DEFAULT_CSS = """
+    CollapsibleEditor {
+        background: $panel;
+        color: $text;
+        text-style: bold;
+    }
+
+    CollapsibleEditor:focus {
+        color: $text 100%; # TODO: This line needed bc of a bug
+        text-style: bold reverse;
+    }
+
+    #editor {
+        display: none;
+    }
+
+    .open #editor {
+        display: block;
+    }
+    """
+
+    show_toggle = reactive(False)
+
+    def __init__(
+        self,
+        text: str,
+        lexer: str,
+        *,
+        label: TextType,
+        show_toggle: bool = False,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+        disabled: bool = False,
+    ):
+        super().__init__(name=name, id=id, classes=classes, disabled=disabled)
+        self.text = text
+        self.label = label
+        self.lexer = lexer
+        self.show_toggle = show_toggle
+        if show_toggle:
+            self.add_class("open")
+
+    def action_toggle(self):
+        print("TOGGLE", self.show_toggle)
+        self.show_toggle = not self.show_toggle
+        self.update_toggle()
+        if self.show_toggle:
+            self.add_class("open")
+        else:
+            self.remove_class("open")
+
+    def on_focus(self):
+        print("FOCUSED!")
+
+    def update_toggle(self):
+        caret = "v" if self.show_toggle else ">"
+        self.caret.update(Text.assemble(self.label, " ", caret))
+
+    def compose(self) -> ComposeResult:
+        self.caret = Static()
+        self.update_toggle()
+        yield self.caret
+        yield Static(Syntax(self.text, lexer=self.lexer), id="editor")
+
+
+class EditorShowcase(Screen):
+    def compose(self) -> ComposeResult:
+        yield Button("testing focus", id="button1")
+        yield CollapsibleEditor(
+            "print('hello world!')",
+            "python",
+            label="Editor demo",
+            show_toggle=True,
+            id="asdf",
+        )
+        yield Footer()
+
+    def on_mount(self):
+        self.query_one("#asdf").focus()
+
+
 class MyApp(App):
     TITLE = "Browser Task Automaton"
     BINDINGS = [Binding("ctrl+q", "quit", "Quit")]
@@ -129,6 +211,9 @@ class MyApp(App):
         yield Button("New procedure", id="to_new_procedure")
         yield Button("Snapshot Before new procedure", id="to_snapshot_new_procedure")
         yield Footer()
+
+    def on_mount(self):
+        self.push_screen(EditorShowcase())
 
     @on(Button.Pressed, "#to_new_procedure")
     def to_new_procedure(self):

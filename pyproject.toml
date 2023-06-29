@@ -13,6 +13,7 @@ state_dl = "src.main:main"
 python = "^3.10"
 playwright = "^1.35.0"
 textual = {extras = ["dev"], version = "^0.28.1"}
+rich = "^13.4.2"
 
 
 [tool.poetry.group.dev.dependencies]
