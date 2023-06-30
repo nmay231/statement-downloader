@@ -1,5 +1,13 @@
+import os
+import shlex
+import sys
+import time
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from subprocess import Popen
+from typing import Iterator
 
 from rich.syntax import Syntax
 from rich.text import Text, TextType
@@ -184,7 +192,10 @@ class EditorShowcase(Screen):
 
 class MyApp(App):
     TITLE = "Browser Task Automaton"
-    BINDINGS = [Binding("ctrl+q", "quit", "Quit")]
+    BINDINGS = [
+        Binding("ctrl+q", "quit", "Quit"),
+        ("s", "suspend", "Suspend and print a message"),
+    ]
 
     def compose(self) -> ComposeResult:
         yield Button("New procedure", id="to_new_procedure")
@@ -201,3 +212,26 @@ class MyApp(App):
     @on(Button.Pressed, "#to_snapshot_new_procedure")
     def to_snapshot_new_procedure(self):
         self.push_screen(NewProcedure(snapshot=True))
+
+    # Details: https://github.com/Textualize/textual/issues/1093
+    # https://github.com/Textualize/textual/pull/1150
+    def action_suspend(self) -> None:
+        with self.suspend():
+            tmp_file = Path("/tmp/_state_dl.tmp.py")
+            tmp_file.touch()
+            tmp_file.write_text("print('Hello world!')")
+            editor = os.environ["VISUAL"] or os.environ["EDITOR"]
+            proc = Popen(shlex.split(f"{editor} {tmp_file}"))
+            proc.wait()
+            print(tmp_file.read_text())
+            time.sleep(2)
+
+    @contextmanager
+    def suspend(self) -> Iterator[None]:
+        driver = self._driver
+
+        if driver is not None:
+            driver.stop_application_mode()
+            with redirect_stdout(sys.stdout), redirect_stderr(sys.stderr):
+                yield
+            driver.start_application_mode()
