@@ -107,15 +107,18 @@ class NewProcedure(Screen[TODOProcedure]):
 
 
 class CollapsibleEditor(Static, can_focus=True):
-    BINDINGS = [Binding("space", "toggle", "Toggle code preview")]
+    BINDINGS = [
+        Binding("space", "toggle", "Toggle code preview"),
+        Binding("enter", "edit", "Edit text"),
+    ]
     DEFAULT_CSS = """
-    CollapsibleEditor {
+    CollapsibleEditor #label {
         background: $panel;
         color: $text;
         text-style: bold;
     }
 
-    CollapsibleEditor:focus {
+    CollapsibleEditor:focus #label {
         color: $text 100%; # TODO: This line needed bc of a bug
         text-style: bold reverse;
     }
@@ -145,7 +148,7 @@ class CollapsibleEditor(Static, can_focus=True):
     ):
         super().__init__(name=name, id=id, classes=classes, disabled=disabled)
         self.text = text
-        self.label = label
+        self.label_text = label
         self.lexer = lexer
         self.show_toggle = show_toggle
         if show_toggle:
@@ -154,31 +157,41 @@ class CollapsibleEditor(Static, can_focus=True):
     def action_toggle(self):
         print("TOGGLE", self.show_toggle)
         self.show_toggle = not self.show_toggle
-        self.update_toggle()
+        self.update_label()
         if self.show_toggle:
             self.add_class("open")
         else:
             self.remove_class("open")
 
+    def action_edit(self):
+        with suspend_app(self.app):
+            self.text = edit_file("state_dl.tmp.py", self.text)
+        self.update_editor()
+
     def on_focus(self):
         print("FOCUSED!")
 
-    def update_toggle(self):
+    def update_label(self):
         caret = "v" if self.show_toggle else ">"
-        self.caret.update(Text.assemble(self.label, " ", caret))
+        self.label.update(Text.assemble(self.label_text, " ", caret))
+
+    def update_editor(self):
+        self.editor.update(Syntax(self.text, lexer=self.lexer))
 
     def compose(self) -> ComposeResult:
-        self.caret = Static()
-        self.update_toggle()
-        yield self.caret
-        yield Static(Syntax(self.text, lexer=self.lexer), id="editor")
+        self.label = Static(id="label")
+        self.editor = Static(id="editor")
+        self.update_label()
+        self.update_editor()
+        yield self.label
+        yield self.editor
 
 
 class EditorShowcase(Screen):
     def compose(self) -> ComposeResult:
         yield Button("testing focus", id="button1")
         yield CollapsibleEditor(
-            "print('hello world!')",
+            "print('hello world!')\n",
             "python",
             label="Editor demo",
             show_toggle=True,
@@ -190,11 +203,35 @@ class EditorShowcase(Screen):
         self.query_one("#asdf").focus()
 
 
+TMP_DIRECTORY = Path("/tmp")
+
+
+def edit_file(file_name, initial_contents: str) -> str:
+    tmp_file = TMP_DIRECTORY / file_name
+    tmp_file.write_text(initial_contents)
+    editor = os.environ["VISUAL"] or os.environ["EDITOR"]
+    proc = Popen([editor, tmp_file])
+    proc.wait()
+    return tmp_file.read_text()
+
+
+# Details: https://github.com/Textualize/textual/issues/1093
+# https://github.com/Textualize/textual/pull/1150
+@contextmanager
+def suspend_app(app: App) -> Iterator[None]:
+    driver = app._driver
+
+    if driver is not None:
+        driver.stop_application_mode()
+        with redirect_stdout(sys.stdout), redirect_stderr(sys.stderr):
+            yield
+            driver.start_application_mode()
+
+
 class MyApp(App):
     TITLE = "Browser Task Automaton"
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit"),
-        ("s", "suspend", "Suspend and print a message"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -212,26 +249,3 @@ class MyApp(App):
     @on(Button.Pressed, "#to_snapshot_new_procedure")
     def to_snapshot_new_procedure(self):
         self.push_screen(NewProcedure(snapshot=True))
-
-    # Details: https://github.com/Textualize/textual/issues/1093
-    # https://github.com/Textualize/textual/pull/1150
-    def action_suspend(self) -> None:
-        with self.suspend():
-            tmp_file = Path("/tmp/_state_dl.tmp.py")
-            tmp_file.touch()
-            tmp_file.write_text("print('Hello world!')")
-            editor = os.environ["VISUAL"] or os.environ["EDITOR"]
-            proc = Popen(shlex.split(f"{editor} {tmp_file}"))
-            proc.wait()
-            print(tmp_file.read_text())
-            time.sleep(2)
-
-    @contextmanager
-    def suspend(self) -> Iterator[None]:
-        driver = self._driver
-
-        if driver is not None:
-            driver.stop_application_mode()
-            with redirect_stdout(sys.stdout), redirect_stderr(sys.stderr):
-                yield
-            driver.start_application_mode()
