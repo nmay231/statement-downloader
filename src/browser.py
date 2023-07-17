@@ -3,7 +3,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 
-class Browser:
+class BrowserWrapper:
     # TODO: Context manager? It's easy enough to do, but I don't know if I can
     #       synchronize a context manager to the lifecycle of a textual component
     async def start(self, url: str):

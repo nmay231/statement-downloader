@@ -1,7 +1,5 @@
 import os
-import shlex
 import sys
-import time
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,10 +20,12 @@ from textual.widgets import (
     ContentSwitcher,
     Footer,
     Input,
+    OptionList,
     Static,
 )
+from textual.widgets.option_list import Option
 
-from .browser import Browser
+from .browser import BrowserWrapper
 
 
 @dataclass
@@ -35,25 +35,31 @@ class Snapshot:
     time: datetime
 
 
+# TODO
+class TODOBetterErrorType(Exception):
+    ...
+
+
 class SnapshotNewProcedure(Screen[list[Snapshot]]):
     snapshots: list[Snapshot]
+    browser: BrowserWrapper | None = None
 
     def compose(self) -> ComposeResult:
         self.snapshots = []
-        with ContentSwitcher(initial="start") as switch:
-            self.switch = switch
+        with ContentSwitcher(initial="start") as self.switch:
             with Container(id="start"):
                 yield Static("Press <Enter> to launch browser")
                 yield Input(placeholder="Initial URL", id="url_input")
             with Container(id="snapshots"):
-                self.new_snapshot_button = Button("Take Snapshot", id="new_snapshot")
-                yield self.new_snapshot_button
+                yield Button("Take Snapshot", id="new_snapshot")
                 self.snapshot_list = Container(id="snapshot_list")
                 yield self.snapshot_list
                 yield Button("Stop", id="stop_snapshot")
 
     @on(Button.Pressed, "#new_snapshot")
     async def new_snapshot(self):
+        if not self.browser:
+            raise TODOBetterErrorType
         snap = Snapshot(
             self.browser.page.url,
             await self.browser.page.content(),
@@ -66,19 +72,26 @@ class SnapshotNewProcedure(Screen[list[Snapshot]]):
 
     @on(Button.Pressed, "#stop_snapshot")
     def stop_snapshot(self):
-        self.dismiss(self.snapshots)
-        self.app.pop_screen()
+        self.dismiss(result=self.snapshots)
 
     @on(Input.Submitted, "#url_input")
     async def start_snapshots(self):
         url = self.query_one("#url_input", Input).value
         self.switch.current = "snapshots"
-        self.new_snapshot_button.focus()
-        self.browser = Browser()
+        self.query_one("#new_snapshot", Button).focus()
+        self.browser = BrowserWrapper()
         await self.browser.start(url)
+        await self.new_snapshot()  # The user most likely wants to keep the first page
 
     async def on_unmount(self):
-        await self.browser.cleanup()
+        if self.browser:
+            await self.browser.cleanup()
+
+
+assert __name__ != "__main__"
+DEFAULT_PROCEDURE_SNIPPET = (
+    Path(__file__).parent / "default_procedure_snippet.py"
+).read_text()
 
 
 @dataclass
@@ -87,6 +100,9 @@ class TODOProcedure:
 
 
 class NewProcedure(Screen[TODOProcedure]):
+    # TODO: How to share browser without stepping on each other's toes?
+    browser: BrowserWrapper | None = None
+
     def __init__(
         self,
         name: str | None = None,
@@ -95,15 +111,31 @@ class NewProcedure(Screen[TODOProcedure]):
         /,
         snapshot=False,
     ) -> None:
-        self.snapshot = snapshot
+        self.to_snapshot = snapshot
+        self.snapshots = dict[str, Snapshot]()
         super().__init__(name, id, classes)
 
     def on_mount(self):
-        if self.snapshot:
-            self.app.push_screen(SnapshotNewProcedure())
+        if self.to_snapshot:
+            self.app.push_screen(SnapshotNewProcedure(), self.receive_snapshots)
+
+    def receive_snapshots(self, snapshots: list[Snapshot]):
+        self.snapshots = {snap.time.isoformat(): snap for snap in snapshots}
+        for id, snap in self.snapshots.items():
+            self.snapshot_list.add_option(Option(snap.url, id=id))
+            # TODO: File permissions so random things cannot access it.
+            path = TMP_DIRECTORY / f"{id}.html"
+            path.write_text(snap.html_content)
 
     def compose(self) -> ComposeResult:
-        yield Static(f"New procedure! {self.snapshot}")
+        yield CollapsibleEditor(DEFAULT_PROCEDURE_SNIPPET, "python", label="Show code")
+        self.snapshot_list = OptionList(id="snapshot_list")
+        yield self.snapshot_list
+
+    @on(OptionList.OptionSelected, "#snapshot_list")
+    def snapshot_list_selected(self, *args):
+        # TODO: How to actually tell which option is selected
+        print(args)
 
 
 class CollapsibleEditor(Static, can_focus=True):
@@ -168,9 +200,6 @@ class CollapsibleEditor(Static, can_focus=True):
             self.text = edit_file("state_dl.tmp.py", self.text)
         self.update_editor()
 
-    def on_focus(self):
-        print("FOCUSED!")
-
     def update_label(self):
         caret = "v" if self.show_toggle else ">"
         self.label.update(Text.assemble(self.label_text, " ", caret))
@@ -185,22 +214,6 @@ class CollapsibleEditor(Static, can_focus=True):
         self.update_editor()
         yield self.label
         yield self.editor
-
-
-class EditorShowcase(Screen):
-    def compose(self) -> ComposeResult:
-        yield Button("testing focus", id="button1")
-        yield CollapsibleEditor(
-            "print('hello world!')\n",
-            "python",
-            label="Editor demo",
-            show_toggle=True,
-            id="asdf",
-        )
-        yield Footer()
-
-    def on_mount(self):
-        self.query_one("#asdf").focus()
 
 
 TMP_DIRECTORY = Path("/tmp")
@@ -238,9 +251,6 @@ class MyApp(App):
         yield Button("New procedure", id="to_new_procedure")
         yield Button("Snapshot Before new procedure", id="to_snapshot_new_procedure")
         yield Footer()
-
-    def on_mount(self):
-        self.push_screen(EditorShowcase())
 
     @on(Button.Pressed, "#to_new_procedure")
     def to_new_procedure(self):
