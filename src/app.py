@@ -1,3 +1,5 @@
+import glob
+import importlib
 import os
 import sys
 import tempfile
@@ -27,6 +29,7 @@ from textual.widgets import (
 from textual.widgets.option_list import Option
 
 from .browser import BrowserWrapper
+from .env import PROCEDURES_DIR
 
 
 @dataclass
@@ -116,6 +119,10 @@ class NewProcedure(Screen[TODOProcedure]):
         self.to_snapshot = snapshot
         self.snapshots = dict[str, Snapshot]()
         self.snapshot_dir = Path(tempfile.gettempdir())
+        # TODO: Very hacky
+        # count = len(glob.glob(str(PROCEDURES_DIR)))
+        count = 0
+        self.procedure_file = PROCEDURES_DIR / f"m{count}.py"
 
     def on_mount(self):
         if self.to_snapshot:
@@ -134,6 +141,7 @@ class NewProcedure(Screen[TODOProcedure]):
         yield self.editor
         self.snapshot_list = OptionList(id="snapshot_list")
         yield self.snapshot_list
+        yield Button("Run `find`", id="find")
 
     @on(OptionList.OptionSelected, "#snapshot_list")
     async def snapshot_list_selected(self, selected: OptionList.OptionSelected) -> None:
@@ -148,6 +156,20 @@ class NewProcedure(Screen[TODOProcedure]):
             return
         self._browser = BrowserWrapper()
         await self._browser.start(uri)
+
+    @on(Button.Pressed, "#find")
+    async def run_find(self):
+        self.procedure_file.parent.mkdir(parents=True, exist_ok=True)
+        self.procedure_file.write_text(self.editor.text)
+        importlib.invalidate_caches()
+        try:
+            importlib.reload(self.module)
+        except AttributeError:
+            self.module = importlib.import_module(
+                name=self.procedure_file.stem,
+                package=PROCEDURES_DIR.stem,
+            )
+        print("PROCEDURE_NAME", self.module.PROCEDURE_NAME)
 
 
 class CollapsibleEditor(Static, can_focus=True):
