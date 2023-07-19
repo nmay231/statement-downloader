@@ -121,8 +121,8 @@ class NewProcedure(Screen[TODOProcedure]):
         if self.to_snapshot:
             self.app.push_screen(SnapshotNewProcedure(), self.receive_snapshots)
 
-    def receive_snapshots(self, snapshots: list[Snapshot]):
-        self.snapshots = {snap.time.isoformat(): snap for snap in snapshots}
+    def receive_snapshots(self, snapshots: list[Snapshot]) -> None:
+        self.snapshots = {str(index): snap for index, snap in enumerate(snapshots)}
         for id, snap in self.snapshots.items():
             self.snapshot_list.add_option(Option(snap.url, id=id))
             # TODO: File permissions so random things cannot access it.
@@ -130,14 +130,24 @@ class NewProcedure(Screen[TODOProcedure]):
             path.write_text(snap.html_content)
 
     def compose(self) -> ComposeResult:
-        yield CollapsibleEditor(DEFAULT_PROCEDURE_SNIPPET, "python", label="Show code")
+        self.editor = CollapsibleEditor(DEFAULT_PROCEDURE_SNIPPET, "python", label="Show code")
+        yield self.editor
         self.snapshot_list = OptionList(id="snapshot_list")
         yield self.snapshot_list
 
     @on(OptionList.OptionSelected, "#snapshot_list")
-    def snapshot_list_selected(self, *args):
-        # TODO: How to actually tell which option is selected
-        print(args)
+    async def snapshot_list_selected(self, selected: OptionList.OptionSelected) -> None:
+        if selected.option_id not in self.snapshots:
+            raise KeyError
+        path = self.snapshot_dir / f"{selected.option_id}.html"
+        await self.browser_visit(f"file://{path}")
+
+    async def browser_visit(self, uri: str) -> None:
+        if hasattr(self, "_browser"):
+            await self._browser.page.goto(uri)
+            return
+        self._browser = BrowserWrapper()
+        await self._browser.start(uri)
 
 
 class CollapsibleEditor(Static, can_focus=True):
