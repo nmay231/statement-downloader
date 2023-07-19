@@ -1,10 +1,11 @@
 import os
 import sys
+import tempfile
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from subprocess import Popen
+from subprocess import call as sh_run
 from typing import Iterator
 
 from rich.syntax import Syntax
@@ -111,9 +112,10 @@ class NewProcedure(Screen[TODOProcedure]):
         /,
         snapshot=False,
     ) -> None:
+        super().__init__(name, id, classes)
         self.to_snapshot = snapshot
         self.snapshots = dict[str, Snapshot]()
-        super().__init__(name, id, classes)
+        self.snapshot_dir = Path(tempfile.gettempdir())
 
     def on_mount(self):
         if self.to_snapshot:
@@ -124,7 +126,7 @@ class NewProcedure(Screen[TODOProcedure]):
         for id, snap in self.snapshots.items():
             self.snapshot_list.add_option(Option(snap.url, id=id))
             # TODO: File permissions so random things cannot access it.
-            path = TMP_DIRECTORY / f"{id}.html"
+            path = self.snapshot_dir / f"{id}.html"
             path.write_text(snap.html_content)
 
     def compose(self) -> ComposeResult:
@@ -205,23 +207,22 @@ class CollapsibleEditor(Static, can_focus=True):
 
     def action_edit(self):
         with suspend_app(self.app):
-            self.text = edit_file("state_dl.tmp.py", self.text)
+            self.text = edit_file(contents=self.text)
         self._update_editor()
 
     def _update_editor(self):
         self.editor.update(Syntax(self.text, lexer=self.lexer))
 
 
-TMP_DIRECTORY = Path("/tmp")
-
-
-def edit_file(file_name, initial_contents: str) -> str:
-    tmp_file = TMP_DIRECTORY / file_name
-    tmp_file.write_text(initial_contents)
-    editor = os.environ["VISUAL"] or os.environ["EDITOR"]
-    proc = Popen([editor, tmp_file])
-    proc.wait()
-    return tmp_file.read_text()
+def edit_file(*, contents: str, suffix=".py") -> str:
+    # I feel this there's a better way to write then read from a tempfile, but whatever...
+    with tempfile.NamedTemporaryFile(suffix=suffix, mode="w+") as f:
+        f.write(contents)
+        f.flush()
+        editor = os.environ["VISUAL"] or os.environ["EDITOR"]
+        sh_run([editor, f.name])
+        f.seek(0)
+        return f.read()
 
 
 # Details: https://github.com/Textualize/textual/issues/1093
