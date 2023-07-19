@@ -164,7 +164,7 @@ class CollapsibleEditor(Static, can_focus=True):
     }
     """
 
-    show_toggle = reactive(False)
+    expanded = reactive(False)
 
     def __init__(
         self,
@@ -172,7 +172,7 @@ class CollapsibleEditor(Static, can_focus=True):
         lexer: str,
         *,
         label: TextType,
-        show_toggle: bool = False,
+        expanded: bool = False,
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
@@ -182,38 +182,34 @@ class CollapsibleEditor(Static, can_focus=True):
         self.text = text
         self.label_text = label
         self.lexer = lexer
-        self.show_toggle = show_toggle
-        if show_toggle:
-            self.add_class("open")
+        self.label = Static(id="label")
+        self.editor = Static(id="editor")
+        self.expanded = expanded  # Set after setting .label
 
-    def action_toggle(self):
-        print("TOGGLE", self.show_toggle)
-        self.show_toggle = not self.show_toggle
-        self.update_label()
-        if self.show_toggle:
+    def compose(self) -> ComposeResult:
+        self._update_editor()
+        yield self.label
+        yield self.editor
+
+    def watch_expanded(self):
+        caret = "v" if self.expanded else ">"
+        self.label.update(Text.assemble(self.label_text, " ", caret))
+
+        if self.expanded:
             self.add_class("open")
         else:
             self.remove_class("open")
 
+    def action_toggle(self):
+        self.expanded = not self.expanded
+
     def action_edit(self):
         with suspend_app(self.app):
             self.text = edit_file("state_dl.tmp.py", self.text)
-        self.update_editor()
+        self._update_editor()
 
-    def update_label(self):
-        caret = "v" if self.show_toggle else ">"
-        self.label.update(Text.assemble(self.label_text, " ", caret))
-
-    def update_editor(self):
+    def _update_editor(self):
         self.editor.update(Syntax(self.text, lexer=self.lexer))
-
-    def compose(self) -> ComposeResult:
-        self.label = Static(id="label")
-        self.editor = Static(id="editor")
-        self.update_label()
-        self.update_editor()
-        yield self.label
-        yield self.editor
 
 
 TMP_DIRECTORY = Path("/tmp")
