@@ -1,4 +1,3 @@
-import glob
 import importlib
 import os
 import sys
@@ -8,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from subprocess import call as sh_run
+from types import ModuleType
 from typing import Iterator
 
 from rich.syntax import Syntax
@@ -24,9 +24,11 @@ from textual.widgets import (
     Footer,
     Input,
     OptionList,
+    SelectionList,
     Static,
 )
 from textual.widgets.option_list import Option
+from textual.widgets.selection_list import Selection
 
 from .browser import BrowserWrapper
 from .env import PROCEDURES_DIR
@@ -105,7 +107,8 @@ class TODOProcedure:
 
 class NewProcedure(Screen[TODOProcedure]):
     # TODO: How to share browser without stepping on each other's toes?
-    browser: BrowserWrapper | None = None
+    _browser: BrowserWrapper | None = None
+    module: ModuleType | None = None
 
     def __init__(
         self,
@@ -137,11 +140,19 @@ class NewProcedure(Screen[TODOProcedure]):
             path.write_text(snap.html_content)
 
     def compose(self) -> ComposeResult:
-        self.editor = CollapsibleEditor(DEFAULT_PROCEDURE_SNIPPET, "python", label="Show code")
+        # TODO: Keep what's there until I have a better testing setup
+        self.editor = CollapsibleEditor(
+            self.procedure_file.read_text(), "python", label="Show code"
+        )
+        # self.editor = CollapsibleEditor(DEFAULT_PROCEDURE_SNIPPET, "python", label="Show code")
         yield self.editor
         self.snapshot_list = OptionList(id="snapshot_list")
         yield self.snapshot_list
-        yield Button("Run `find`", id="find")
+        yield Button("Run `find()`", id="find")
+        self.name_label = Static("<PROCEDURE_NAME>")
+        yield self.name_label
+        self.options = SelectionList()
+        yield self.options
 
     @on(OptionList.OptionSelected, "#snapshot_list")
     async def snapshot_list_selected(self, selected: OptionList.OptionSelected) -> None:
@@ -151,25 +162,54 @@ class NewProcedure(Screen[TODOProcedure]):
         await self.browser_visit(f"file://{path}")
 
     async def browser_visit(self, uri: str) -> None:
-        if hasattr(self, "_browser"):
+        if self._browser is not None:
             await self._browser.page.goto(uri)
             return
         self._browser = BrowserWrapper()
+        self._browser.context.on("close", self._clear_browser)
         await self._browser.start(uri)
+
+    def _clear_browser(self, browser):
+        self._browser = None
 
     @on(Button.Pressed, "#find")
     async def run_find(self):
+        try:
+            await self._run_find()
+        except Exception as e:
+            self.name_label.update(f"Error raise! {e!r}")
+            return
+
+    async def _run_find(self):
         self.procedure_file.parent.mkdir(parents=True, exist_ok=True)
         self.procedure_file.write_text(self.editor.text)
-        importlib.invalidate_caches()
-        try:
+
+        if self.module:
             importlib.reload(self.module)
-        except AttributeError:
+        else:
             self.module = importlib.import_module(
                 name=self.procedure_file.stem,
                 package=PROCEDURES_DIR.stem,
             )
-        print("PROCEDURE_NAME", self.module.PROCEDURE_NAME)
+        self.name_label.update(f"{self.module.PROCEDURE_NAME} <PENDING>")
+        self.name_label.refresh()
+
+        if not self._browser:
+            self._browser = BrowserWrapper()
+            await self._browser.start(None)
+
+        browser = self._browser.context
+        page = self._browser.page
+        self.options.clear_options()
+        entries = await self.module.find(browser, page)
+        assert isinstance(entries, list)
+        self.options.add_options(
+            [
+                Selection(entry.label, entry.id, not index)
+                for index, entry in enumerate(entries)
+            ]
+        )
+        self.name_label.update(self.module.PROCEDURE_NAME)
 
 
 class CollapsibleEditor(Static, can_focus=True):
