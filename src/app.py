@@ -15,7 +15,7 @@ from rich.text import Text, TextType
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal
+from textual.containers import Container, Horizontal, ScrollableContainer
 from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
@@ -141,10 +141,8 @@ class NewProcedure(Screen[TODOProcedure]):
 
     def compose(self) -> ComposeResult:
         # TODO: Keep what's there until I have a better testing setup
-        self.editor = CollapsibleEditor(
-            self.procedure_file.read_text(), "python", label="Show code"
-        )
-        # self.editor = CollapsibleEditor(DEFAULT_PROCEDURE_SNIPPET, "python", label="Show code")
+        self.editor = Editor(self.procedure_file.read_text(), "python")
+        # self.editor = Editor(DEFAULT_PROCEDURE_SNIPPET, "python")
         yield self.editor
         self.snapshot_list = OptionList(id="snapshot_list")
         yield self.snapshot_list
@@ -191,6 +189,7 @@ class NewProcedure(Screen[TODOProcedure]):
                 name=self.procedure_file.stem,
                 package=PROCEDURES_DIR.stem,
             )
+        # TODO: Figure out how to flush updates so this actually works
         self.name_label.update(f"{self.module.PROCEDURE_NAME} <PENDING>")
         self.name_label.refresh()
 
@@ -212,41 +211,16 @@ class NewProcedure(Screen[TODOProcedure]):
         self.name_label.update(self.module.PROCEDURE_NAME)
 
 
-class CollapsibleEditor(Static, can_focus=True):
+class Editor(ScrollableContainer, can_focus=True):
     BINDINGS = [
-        Binding("space", "toggle", "Toggle code preview"),
         Binding("enter", "edit", "Edit text"),
     ]
-    DEFAULT_CSS = """
-    CollapsibleEditor #label {
-        background: $panel;
-        color: $text;
-        text-style: bold;
-    }
-
-    CollapsibleEditor:focus #label {
-        color: $text 100%; # TODO: This line needed bc of a bug
-        text-style: bold reverse;
-    }
-
-    #editor {
-        display: none;
-    }
-
-    .open #editor {
-        display: block;
-    }
-    """
-
-    expanded = reactive(False)
 
     def __init__(
         self,
         text: str,
         lexer: str,
         *,
-        label: TextType,
-        expanded: bool = False,
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
@@ -254,28 +228,16 @@ class CollapsibleEditor(Static, can_focus=True):
     ):
         super().__init__(name=name, id=id, classes=classes, disabled=disabled)
         self.text = text
-        self.label_text = label
         self.lexer = lexer
-        self.label = Static(id="label")
         self.editor = Static(id="editor")
-        self.expanded = expanded  # Set after setting .label
+        self.editor.border_title = "PROCEDURE NAME?"
 
     def compose(self) -> ComposeResult:
         self._update_editor()
-        yield self.label
         yield self.editor
 
-    def watch_expanded(self):
-        caret = "v" if self.expanded else ">"
-        self.label.update(Text.assemble(self.label_text, " ", caret))
-
-        if self.expanded:
-            self.add_class("open")
-        else:
-            self.remove_class("open")
-
-    def action_toggle(self):
-        self.expanded = not self.expanded
+    def on_click(self):
+        self.action_edit()
 
     def action_edit(self):
         with suspend_app(self.app):
@@ -315,6 +277,7 @@ class MyApp(App):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit"),
     ]
+    CSS_PATH = ["editor.tcss"]
 
     def compose(self) -> ComposeResult:
         yield Button("New procedure", id="to_new_procedure")

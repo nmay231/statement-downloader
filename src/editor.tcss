@@ -1,0 +1,9 @@
+Editor {
+    height: 30%;
+    padding: 1;
+}
+
+Editor:focus {
+    padding: 0;
+    border: heavy $accent;
+}
