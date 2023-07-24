@@ -5,18 +5,17 @@ import tempfile
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 from subprocess import call as sh_run
 from types import ModuleType
 from typing import Iterator
 
 from rich.syntax import Syntax
-from rich.text import Text, TextType
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, ScrollableContainer
-from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
     Button,
@@ -151,6 +150,10 @@ class NewProcedure(Screen[TODOProcedure]):
         yield self.name_label
         self.options = SelectionList()
         yield self.options
+        with ScrollableContainer(id="debug_output"):
+            self.output = Static()
+            self.output.border_title = "Debug Output (stdout/stderr)"
+            yield self.output
 
     @on(OptionList.OptionSelected, "#snapshot_list")
     async def snapshot_list_selected(self, selected: OptionList.OptionSelected) -> None:
@@ -173,7 +176,12 @@ class NewProcedure(Screen[TODOProcedure]):
     @on(Button.Pressed, "#find")
     async def run_find(self):
         try:
-            await self._run_find()
+            output = StringIO()
+            with redirect_stdout(output), redirect_stderr(output):
+                # TODO: Timeout to catch infinite loops
+                await self._run_find()
+            output.seek(0)
+            self.output.update(output.read())
         except Exception as e:
             self.name_label.update(f"Error raise! {e!r}")
             return
@@ -277,7 +285,7 @@ class MyApp(App):
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit"),
     ]
-    CSS_PATH = ["editor.tcss"]
+    CSS_PATH = ["app.tcss"]
 
     def compose(self) -> ComposeResult:
         yield Button("New procedure", id="to_new_procedure")
