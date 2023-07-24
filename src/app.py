@@ -2,6 +2,7 @@ import importlib
 import os
 import sys
 import tempfile
+import traceback
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from datetime import datetime
@@ -175,16 +176,15 @@ class NewProcedure(Screen[TODOProcedure]):
 
     @on(Button.Pressed, "#find")
     async def run_find(self):
-        try:
-            output = StringIO()
-            with redirect_stdout(output), redirect_stderr(output):
+        output = StringIO()
+        with redirect_stdout(output), redirect_stderr(output):
+            try:
                 # TODO: Timeout to catch infinite loops
                 await self._run_find()
-            output.seek(0)
-            self.output.update(output.read())
-        except Exception as e:
-            self.name_label.update(f"Error raise! {e!r}")
-            return
+            except Exception:
+                traceback.print_exc()
+        output.seek(0)
+        self.output.update(output.read())
 
     async def _run_find(self):
         self.procedure_file.parent.mkdir(parents=True, exist_ok=True)
