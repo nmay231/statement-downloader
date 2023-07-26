@@ -17,9 +17,10 @@ class Entry:
 
 async def find(browser: Browser, page: Page) -> list[Entry]:
     """Return a list of entries that will be presented in a feed"""
+    print("finding in page...")
     return []
 
 
 async def process(browser: Browser, page: Page, picked: list[Entry]) -> None:
     """Given a (filtered) list of the previous entries, process them however you wish"""
-    pass
+    print("processing...")

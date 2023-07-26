@@ -141,19 +141,21 @@ class NewProcedure(Screen[TODOProcedure]):
 
     def compose(self) -> ComposeResult:
         # TODO: Keep what's there until I have a better testing setup
-        self.editor = Editor(self.procedure_file.read_text(), "python")
-        # self.editor = Editor(DEFAULT_PROCEDURE_SNIPPET, "python")
-        yield self.editor
-        self.snapshot_list = OptionList(id="snapshot_list")
-        yield self.snapshot_list
-        yield Button("Run `find()`", id="find")
-        self.name_label = Static("<PROCEDURE_NAME>")
-        yield self.name_label
-        self.options = SelectionList()
-        yield self.options
-        with ScrollableContainer(id="debug_output"):
+        with ScrollableContainer(id="editor"):
+            self.editor = Editor(self.procedure_file.read_text(), "python")
+            # self.editor = Editor(DEFAULT_PROCEDURE_SNIPPET, "python")
+            yield self.editor
+        with ScrollableContainer(id="misc"):
+            self.snapshot_list = OptionList(id="snapshot_list")
+            yield self.snapshot_list
+            yield Button("Run `find()`", id="find")
+            self.name_label = Static("<PROCEDURE_NAME>")
+            yield self.name_label
+            self.options = SelectionList()
+            yield self.options
+        with ScrollableContainer(id="debug_output") as container:
+            container.border_title = "Debug Output (stdout/stderr)"
             self.output = Static()
-            self.output.border_title = "Debug Output (stdout/stderr)"
             yield self.output
 
     @on(OptionList.OptionSelected, "#snapshot_list")
@@ -243,6 +245,7 @@ class Editor(ScrollableContainer, can_focus=True):
     def compose(self) -> ComposeResult:
         self._update_editor()
         yield self.editor
+        yield Static("<EOF>", id="eof")
 
     def on_click(self):
         self.action_edit()
@@ -253,6 +256,7 @@ class Editor(ScrollableContainer, can_focus=True):
         self._update_editor()
 
     def _update_editor(self):
+        self.editor.styles.height = 1 + self.text.count("\n")
         self.editor.update(Syntax(self.text, lexer=self.lexer))
 
 

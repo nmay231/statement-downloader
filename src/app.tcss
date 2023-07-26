@@ -1,5 +1,8 @@
+* {
+    box-sizing: border-box;
+}
+
 Editor {
-    height: 30%;
     padding: 1;
 }
 
@@ -8,7 +11,25 @@ Editor:focus {
     border: heavy $accent;
 }
 
+Editor #eof {
+    width: 100%;
+    text-align: center;
+}
+
+NewProcedure {
+    height: 100%
+}
+
+NewProcedure #editor {
+    height: 3fr;
+}
+
+NewProcedure #misc {
+    height: 4fr;
+}
+
 NewProcedure #debug_output {
+    height: 3fr;
     border-title-align: center;
-    border: heavy $accent;
+    border: solid $accent;
 }
