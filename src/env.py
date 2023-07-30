@@ -30,5 +30,11 @@ class ContextInfo(BaseModel):
     browser: BrowserEnum
 
 
-# TODO: Load elsewhere
+# TODO: Load when the app launches?
 config = Config.model_validate_json((CONFIG_PATH / "data.json").read_text())
+
+
+assert __name__ != "__main__"
+DEFAULT_PROCEDURE_SNIPPET = (
+    Path(__file__).parent / "default_procedure_snippet.py"
+).read_text()
