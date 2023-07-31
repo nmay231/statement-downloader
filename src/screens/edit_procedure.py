@@ -10,6 +10,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
 from textual.screen import Screen
+from textual.widget import Widget
 from textual.widgets import (
     Button,
     OptionList,
@@ -25,30 +26,33 @@ from ..widgets.editor import Editor
 from .snapshot_new_procedure import Snapshot, SnapshotNewProcedure
 
 
+class TODOBetterErrorName(Exception):
+    ...
+
+
 # TODO: Add a submit button and .dismiss(procedure_info)
-class NewProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this for some reason..
+class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this for some reason..
     # TODO: How to share browser without stepping on each other's toes?
     _browser: BrowserWrapper | None = None
     module: ModuleType | None = None
 
     def __init__(
         self,
+        proc_name: str,
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
-        /,
-        # procedure_name: str | None = None,
+        *,
         snapshot=False,
     ) -> None:
         super().__init__(name, id, classes)
         self.to_snapshot = snapshot
         self.snapshots = dict[str, Snapshot]()
         self.snapshot_dir = Path(tempfile.gettempdir())
-        # TODO: Very hacky
-        # count = len(glob.glob(str(PROCEDURES_DIR)))
-        count = 0
-        self.procedure_file = PROCEDURES_DIR / f"m{count}.py"
-        self.procedure_file = PROCEDURES_DIR / "0test with spaces.py"
+
+        if not proc_name:
+            raise TODOBetterErrorName
+        self.procedure_file = PROCEDURES_DIR / f"{proc_name}.py"
         if not self.procedure_file.exists():
             self.procedure_file.write_text(DEFAULT_PROCEDURE_SNIPPET)
 
@@ -65,15 +69,16 @@ class NewProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this fo
             path.write_text(snap.html_content)
 
     def compose(self) -> ComposeResult:
-        # TODO: Keep what's there until I have a better testing setup
         with ScrollableContainer(id="editor"):
             self.editor = Editor(self.procedure_file.read_text(), "python")
-            # self.editor = Editor(DEFAULT_PROCEDURE_SNIPPET, "python")
             yield self.editor
         with ScrollableContainer(id="misc"):
             self.snapshot_list = OptionList(id="snapshot_list")
             yield self.snapshot_list
-            yield Button("Run `find()`", id="find")
+            with Widget(classes="button-row"):
+                yield Button("Run `find()`", id="find")
+                yield Button("Run `many()` TODO", id="many")
+                yield Button("Save procedure", id="save")
             self.name_label = Static("<PROCEDURE_NAME>")
             yield self.name_label
             self.options = SelectionList()
@@ -98,7 +103,7 @@ class NewProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this fo
         self._browser.context.on("close", self._clear_browser)
         await self._browser.start(uri)
 
-    def _clear_browser(self, browser):
+    def _clear_browser(self, closed_browser):
         self._browser = None
 
     @on(Button.Pressed, "#find")
@@ -113,12 +118,17 @@ class NewProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this fo
         output.seek(0)
         self.output.update(output.read())
 
+    @on(Button.Pressed, "#save")
+    async def save_procedure(self):
+        self.procedure_file.write_text(self.editor.text)
+        self.dismiss(ProcedureInfo(display_name=self.procedure_file.stem))
+
     async def _run_find(self):
         self.procedure_file.parent.mkdir(parents=True, exist_ok=True)
         self.procedure_file.write_text(self.editor.text)
 
         # TODO: Since an imported module technically is cached, and we can import more than one module, I might need to keep track of all imported modules, not just the current one, so I don't get any out of date cache hits
-        # I can check if the module name is in sys.modules and if it is then reload it
+        # TODO: I can check if the module name is in sys.modules and if it is then reload it
         if self.module:
             importlib.reload(self.module)
         else:
@@ -127,8 +137,8 @@ class NewProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this fo
                 package=PROCEDURES_DIR.stem,
             )
         # TODO: Figure out how to flush updates so this actually works halfway through this function
-        self.name_label.update(f"{self.module.PROCEDURE_NAME} <PENDING>")
-        self.name_label.refresh()
+        self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
+        # self.app.refresh()  # TODO: Still need to test to see if this works (just not in this commit)
 
         if not self._browser:
             self._browser = BrowserWrapper()
@@ -145,4 +155,4 @@ class NewProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this fo
                 for index, entry in enumerate(entries)
             ]
         )
-        self.name_label.update(self.module.PROCEDURE_NAME)
+        self.name_label.update(self.procedure_file.stem)

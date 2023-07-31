@@ -2,9 +2,6 @@ from dataclasses import dataclass
 
 from playwright.async_api import Browser, Page
 
-# TODO: Configuration will eventually be done using an object imported from state_dl for type safety
-PROCEDURE_NAME = "your procedure"
-
 
 @dataclass
 class Entry:

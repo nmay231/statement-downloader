@@ -2,15 +2,17 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
+from textual.widget import Widget
 from textual.widgets import (
     Button,
     Footer,
     OptionList,
 )
-from textual.widgets.option_list import Option
+from textual.widgets.option_list import Option, OptionDoesNotExist
 
-from .env import PROCEDURES_DIR, ProcedureInfo, config
-from .screens.edit_procedure import NewProcedure
+from .env import CONFIG_PATH, HOME_PATH, PROCEDURES_DIR, ProcedureInfo, config
+from .screens.edit_procedure import EditProcedure
+from .screens.new_procedure import NewProcedure
 
 
 class MyApp(App):
@@ -23,7 +25,7 @@ class MyApp(App):
     procedures = dict[str, ProcedureInfo | None]()
 
     def compose(self) -> ComposeResult:
-        with Horizontal():
+        with Widget(classes="button-row"):
             yield Button("New procedure", id="to_new_procedure")
             yield Button("Snapshot before new procedure", id="to_snapshot_new_procedure")
             self.edit_procedure_button = Button(
@@ -59,11 +61,13 @@ class MyApp(App):
 
     @on(Button.Pressed, "#to_new_procedure")
     def to_new_procedure(self):
-        self.push_screen(NewProcedure(snapshot=False))
+        self.push_screen(NewProcedure())
 
     @on(Button.Pressed, "#to_snapshot_new_procedure")
     def to_snapshot_new_procedure(self):
-        self.push_screen(NewProcedure(snapshot=True))
+        # TODO
+        # self.push_screen(EditProcedure(snapshot=True))
+        ...
 
     @on(OptionList.OptionSelected, "#procedure_list")
     async def snapshot_list_selected(self, selected: OptionList.OptionSelected) -> None:
@@ -79,6 +83,15 @@ class MyApp(App):
     async def edit_procedure(self) -> None:
         name = self.current_proc_name
         assert name and name in self.procedures, "Forgot to update self.procedures or procname"
+        self.app.push_screen(EditProcedure(proc_name=name), self.save_procedure)
 
-        # TODO: Make NewProcedure => EditProcedure
-        # self.push_screen(NewProcedure(procedure_name=name))
+    async def save_procedure(self, proc: ProcedureInfo):
+        # TODO: Do I need manage display_name and file name separately?
+        if proc.display_name in self.procedures:
+            return
+
+        name = proc.display_name
+        self.procedure_list.add_option(Option(name, id=name))
+        self.procedures[name] = proc
+        config.procedures[name] = proc
+        CONFIG_PATH.write_text(config.model_dump_json(indent=4))

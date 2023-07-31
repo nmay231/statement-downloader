@@ -2,6 +2,15 @@
     box-sizing: border-box;
 }
 
+.button-row {
+    layout: horizontal;
+    height: auto;
+}
+
+.button-row > * {
+    margin: 1 2;
+}
+
 Editor {
     padding: 1;
 }
