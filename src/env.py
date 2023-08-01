@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 
 HOME_PATH = (Path.home() / ".local/share/state_dl").resolve()
 PROCEDURES_DIR = HOME_PATH / "procedure_scripts"
-# TODO: Is this even needed?
 sys.path.append(str(PROCEDURES_DIR))  # TODO: Better place to do this
 
 
