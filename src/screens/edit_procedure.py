@@ -1,4 +1,5 @@
 import importlib
+import sys
 import tempfile
 import traceback
 from contextlib import redirect_stderr, redirect_stdout
@@ -34,7 +35,6 @@ class TODOBetterErrorName(Exception):
 class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this for some reason..
     # TODO: How to share browser without stepping on each other's toes?
     _browser: BrowserWrapper | None = None
-    module: ModuleType | None = None
 
     def __init__(
         self,
@@ -127,17 +127,10 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
         self.procedure_file.parent.mkdir(parents=True, exist_ok=True)
         self.procedure_file.write_text(self.editor.text)
 
-        # TODO: Since an imported module technically is cached, and we can import more than one module, I might need to keep track of all imported modules, not just the current one, so I don't get any out of date cache hits
-        # TODO: I can check if the module name is in sys.modules and if it is then reload it
-        if self.module:
-            importlib.reload(self.module)
-        else:
-            self.module = importlib.import_module(
-                name=self.procedure_file.stem,
-                package=PROCEDURES_DIR.stem,
-            )
+        module = self._latest_module()
         # TODO: Figure out how to flush updates so this actually works halfway through this function
         self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
+        # await self.
         # self.app.refresh()  # TODO: Still need to test to see if this works (just not in this commit)
 
         if not self._browser:
@@ -147,7 +140,7 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
         browser = self._browser.context
         page = self._browser.page
         self.options.clear_options()
-        entries = await self.module.find(browser, page)
+        entries = await module.find(browser, page)
         assert isinstance(entries, list)
         self.options.add_options(
             [
@@ -156,3 +149,13 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
             ]
         )
         self.name_label.update(self.procedure_file.stem)
+
+    def _latest_module(self) -> ModuleType:
+        module_name = self.procedure_file.stem
+        package = PROCEDURES_DIR.stem
+        module = sys.modules.get(module_name)
+
+        if not module:
+            return importlib.import_module(name=module_name, package=package)
+        else:
+            return importlib.reload(module)
