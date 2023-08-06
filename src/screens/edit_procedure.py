@@ -128,10 +128,8 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
         self.procedure_file.write_text(self.editor.text)
 
         module = self._latest_module()
-        # TODO: Figure out how to flush updates so this actually works halfway through this function
+        # TODO: Bug report: https://github.com/Textualize/textual/issues/3052
         self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
-        # await self.
-        # self.app.refresh()  # TODO: Still need to test to see if this works (just not in this commit)
 
         if not self._browser:
             self._browser = BrowserWrapper()
