@@ -22,11 +22,6 @@ class Snapshot:
     time: datetime
 
 
-# TODO
-class TODOBetterErrorType(Exception):
-    ...
-
-
 class SnapshotNewProcedure(Screen[list[Snapshot]]):  # type: ignore Pylance hates this, le sigh
     snapshots: list[Snapshot]
     browser: BrowserWrapper | None = None
@@ -45,8 +40,7 @@ class SnapshotNewProcedure(Screen[list[Snapshot]]):  # type: ignore Pylance hate
 
     @on(Button.Pressed, "#new_snapshot")
     async def new_snapshot(self):
-        if not self.browser:
-            raise TODOBetterErrorType
+        assert self.browser, "forgot to init browser"
         snap = Snapshot(
             self.browser.page.url,
             await self.browser.page.content(),
