@@ -2,10 +2,10 @@ import importlib
 import sys
 import tempfile
 import traceback
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
-from types import ModuleType
+from typing import Any
 
 from textual import on
 from textual.app import ComposeResult
@@ -27,9 +27,10 @@ from ..widgets.editor import Editor
 from .snapshot_new_procedure import Snapshot, SnapshotNewProcedure
 
 
-class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this for some reason..
+class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this for some reason
     # TODO: How to share browser without stepping on each other's toes?
     _browser: BrowserWrapper | None = None
+    _entries: dict[str, Any] = {}
 
     def __init__(
         self,
@@ -74,11 +75,11 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
             yield self.snapshot_list
             with Widget(classes="button-row"):
                 yield Button("Run `find()`", id="find")
-                yield Button("Run `many()` TODO", id="many")
+                yield Button("Run `process()`", id="process")
                 yield Button("Save procedure", id="save")
             self.name_label = Static("<PROCEDURE_NAME>")
             yield self.name_label
-            self.options = SelectionList()
+            self.options = SelectionList[str]()
             yield self.options
         with ScrollableContainer(id="debug_output") as container:
             container.border_title = "Debug Output (stdout/stderr)"
@@ -103,54 +104,83 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
     def _clear_browser(self, closed_browser):
         self._browser = None
 
-    @on(Button.Pressed, "#find")
-    async def run_find(self):
+    @contextmanager
+    def _import_procedure(self):
         output = StringIO()
         with redirect_stdout(output), redirect_stderr(output):
+            # TODO: Timeout to catch infinite loops
+            module_name = self.procedure_file.stem
+            package = PROCEDURES_DIR.stem
+            module = sys.modules.get(module_name)
+
+            imported = False
             try:
-                # TODO: Timeout to catch infinite loops
-                await self._run_find()
+                if not module:
+                    module = importlib.import_module(name=module_name, package=package)
+                else:
+                    module = importlib.reload(module)
+                imported = True
+                yield module
             except Exception:
                 traceback.print_exc()
+                if not imported:
+                    yield None
+
         output.seek(0)
         self.output.update(output.read())
 
-    @on(Button.Pressed, "#save")
-    async def save_procedure(self):
-        self.procedure_file.write_text(self.editor.text)
-        self.dismiss(ProcedureInfo(display_name=self.procedure_file.stem))
-
-    async def _run_find(self):
-        self.procedure_file.parent.mkdir(parents=True, exist_ok=True)
-        self.procedure_file.write_text(self.editor.text)
-
-        module = self._latest_module()
-        # TODO: Bug report: https://github.com/Textualize/textual/issues/3052
-        self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
-
+    async def _browser_wrapper(self):
         if not self._browser:
             self._browser = BrowserWrapper()
             await self._browser.start(None)
+        return self._browser
 
-        browser = self._browser.context
-        page = self._browser.page
-        self.options.clear_options()
-        entries = await module.find(browser, page)
-        assert isinstance(entries, list)
-        self.options.add_options(
-            [
-                Selection(entry.label, entry.id, not index)
-                for index, entry in enumerate(entries)
-            ]
-        )
-        self.name_label.update(self.procedure_file.stem)
+    @on(Button.Pressed, "#find")
+    async def run_find(self):
+        # TODO: Bug report: https://github.com/Textualize/textual/issues/3052
+        self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
+        self.set_timer(0, lambda: self.name_label.update(self.procedure_file.stem))
 
-    def _latest_module(self) -> ModuleType:
-        module_name = self.procedure_file.stem
-        package = PROCEDURES_DIR.stem
-        module = sys.modules.get(module_name)
+        with self._import_procedure() as module:
+            if not module:
+                return
+            wrapper = await self._browser_wrapper()
+            browser = wrapper.context
+            page = wrapper.page
 
-        if not module:
-            return importlib.import_module(name=module_name, package=package)
-        else:
-            return importlib.reload(module)
+            self.options.clear_options()
+            entries = await module.find(browser, page)
+            assert isinstance(entries, list), "expected `find()` to return list[Entry]"
+            self._entries = {e.id: e for e in entries}
+            self.options.add_options(
+                [
+                    Selection(entry.label, entry.id, initial_state=not index)
+                    for index, entry in enumerate(entries)
+                ]
+            )
+
+    @on(Button.Pressed, "#process")
+    async def run_process(self):
+        if not self._entries:
+            self.output.update("Must run `find()` first (or no entries returned from find)")
+            return
+
+        # TODO: Bug report: https://github.com/Textualize/textual/issues/3052
+        self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
+        self.set_timer(0, lambda: self.name_label.update(self.procedure_file.stem))
+
+        with self._import_procedure() as module:
+            if not module:
+                return
+            wrapper = await self._browser_wrapper()
+            browser = wrapper.context
+            page = wrapper.page
+
+            entries = [self._entries[id] for id in self.options.selected]
+            await module.process(browser, page, entries)
+
+    @on(Button.Pressed, "#save")
+    async def save_procedure(self):
+        if self._browser:
+            await self._browser.cleanup()
+        self.dismiss(ProcedureInfo(display_name=self.procedure_file.stem))

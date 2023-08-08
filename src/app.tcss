@@ -12,11 +12,11 @@
 }
 
 Editor {
-    padding: 1;
+    padding: 1 2;
 }
 
 Editor:focus {
-    padding: 0;
+    padding: 0 1;
     border: heavy $accent;
 }
 

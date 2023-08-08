@@ -17,7 +17,9 @@ class BrowserWrapper:
         # if url:
         # TODO: allow new procedure to take a default url
         if url or True:
-            await self.page.goto("https://en.wikipedia.org/wiki/Lists_of_books")
+            await self.page.goto(
+                "https://en.wikipedia.org/wiki/Portraits_of_presidents_of_the_United_States"
+            )
 
     async def cleanup(self):
         self._auth_path.parent.mkdir(parents=True, exist_ok=True)
