@@ -27,11 +27,6 @@ from ..widgets.editor import Editor
 from .snapshot_new_procedure import Snapshot, SnapshotNewProcedure
 
 
-class TODOBetterErrorName(Exception):
-    ...
-
-
-# TODO: Add a submit button and .dismiss(procedure_info)
 class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this for some reason..
     # TODO: How to share browser without stepping on each other's toes?
     _browser: BrowserWrapper | None = None
@@ -50,8 +45,6 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
         self.snapshots = dict[str, Snapshot]()
         self.snapshot_dir = Path(tempfile.gettempdir())
 
-        if not proc_name:
-            raise TODOBetterErrorName
         self.procedure_file = PROCEDURES_DIR / f"{proc_name}.py"
         if not self.procedure_file.exists():
             self.procedure_file.write_text(DEFAULT_PROCEDURE_SNIPPET)
@@ -70,7 +63,11 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
 
     def compose(self) -> ComposeResult:
         with ScrollableContainer(id="editor"):
-            self.editor = Editor(self.procedure_file.read_text(), "python")
+            self.editor = Editor(
+                self.procedure_file,
+                "python",
+                default_contents=DEFAULT_PROCEDURE_SNIPPET,
+            )
             yield self.editor
         with ScrollableContainer(id="misc"):
             self.snapshot_list = OptionList(id="snapshot_list")
