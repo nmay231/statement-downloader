@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Noah May <noahmouse2011@gmail.com>"]
 readme = "README.md"
-packages = [{include = "src"}]
+packages = [{ include = "src" }]
 
 [tool.poetry.scripts]
 state_dl = "src.main:main"
@@ -27,6 +27,9 @@ requests = "^2.31.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+float_to_top = true
 
 [tool.ruff]
 line-length = 95

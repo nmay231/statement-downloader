@@ -8,17 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from rich.markup import escape
-from textual import on
+from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
 from textual.screen import Screen
 from textual.widget import Widget
-from textual.widgets import (
-    Button,
-    OptionList,
-    SelectionList,
-    Static,
-)
+from textual.widgets import Button, OptionList, SelectionList, Static
 from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
@@ -138,10 +133,11 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
 
     @on(Button.Pressed, "#find")
     async def run_find(self):
-        # TODO: Bug report: https://github.com/Textualize/textual/issues/3052
-        self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
-        self.set_timer(0, lambda: self.name_label.update(self.procedure_file.stem))
+        self._run_find()
 
+    @work
+    async def _run_find(self):
+        self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
         with self._import_procedure() as module:
             if not module:
                 return
@@ -159,17 +155,19 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
                     for index, entry in enumerate(entries)
                 ]
             )
+        self.name_label.update(self.procedure_file.stem)
 
     @on(Button.Pressed, "#process")
     async def run_process(self):
+        self._run_process()
+
+    @work
+    async def _run_process(self):
         if not self._entries:
-            self.output.update("Must run `find()` first (or no entries returned from find)")
+            self.output.update("Run [bold]find()[/] first, and ensure something's returned")
             return
 
-        # TODO: Bug report: https://github.com/Textualize/textual/issues/3052
         self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
-        self.set_timer(0, lambda: self.name_label.update(self.procedure_file.stem))
-
         with self._import_procedure() as module:
             if not module:
                 return
@@ -179,6 +177,7 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
 
             entries = [self._entries[id] for id in self.options.selected]
             await module.process(browser, page, entries)
+        self.name_label.update(f"{self.procedure_file.stem} <FINISHED>")
 
     @on(Button.Pressed, "#save")
     async def save_procedure(self):

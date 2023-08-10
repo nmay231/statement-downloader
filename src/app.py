@@ -1,16 +1,11 @@
 from textual import on
 from textual.app import App, ComposeResult
-from textual.binding import Binding
-from textual.containers import Horizontal
 from textual.widget import Widget
-from textual.widgets import (
-    Button,
-    Footer,
-    OptionList,
-)
-from textual.widgets.option_list import Option, OptionDoesNotExist
+from textual.binding import Binding
+from textual.widgets import Button, Footer, OptionList
+from textual.widgets.option_list import Option
 
-from .env import CONFIG_PATH, HOME_PATH, PROCEDURES_DIR, ProcedureInfo, config
+from .env import CONFIG_PATH, PROCEDURES_DIR, ProcedureInfo, config
 from .screens.edit_procedure import EditProcedure
 from .screens.new_procedure import NewProcedure
 
