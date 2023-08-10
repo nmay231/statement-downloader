@@ -7,6 +7,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
+from rich.markup import escape
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
@@ -127,7 +128,7 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
                     yield None
 
         output.seek(0)
-        self.output.update(output.read())
+        self.output.update(escape(output.read()))
 
     async def _browser_wrapper(self):
         if not self._browser:
