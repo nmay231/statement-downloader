@@ -5,7 +5,10 @@ from textual.binding import Binding
 from textual.widgets import Button, Footer, OptionList
 from textual.widgets.option_list import Option
 
-from .env import CONFIG_PATH, PROCEDURES_DIR, ProcedureInfo, config
+
+from textual.driver import Driver
+
+from .env import Config, Context, ProcedureInfo
 from .screens.edit_procedure import EditProcedure
 from .screens.new_procedure import NewProcedure
 
@@ -17,7 +20,18 @@ class MyApp(App):
     ]
     CSS_PATH = ["app.tcss"]
 
+    # TODO: Resolve differences between self.config.procedures and .procedures
     procedures = dict[str, ProcedureInfo | None]()
+
+    def __init__(
+        self,
+        driver_class: type[Driver] | None = None,
+        css_path=None,
+        watch_css: bool = False,
+    ):
+        self.config = Config.load_from_path(Context.config_p)
+        self.ctx = Context(self.config)
+        super().__init__(driver_class, css_path, watch_css)
 
     def compose(self) -> ComposeResult:
         with Widget(classes="button-row"):
@@ -36,9 +50,9 @@ class MyApp(App):
 
     def _load_procedures(self):
         self.procedure_list.clear_options()
-        all_procedures = {**config.procedures}
+        all_procedures = {**self.config.procedures}
 
-        for procedure in PROCEDURES_DIR.glob("*.py"):
+        for procedure in self.ctx.procedures_dir_p.glob("*.py"):
             name = procedure.stem
             proc = all_procedures.pop(name, None)
             self.procedures[name] = proc
@@ -78,7 +92,7 @@ class MyApp(App):
     async def edit_procedure(self) -> None:
         name = self.current_proc_name
         assert name and name in self.procedures, "Forgot to update self.procedures or procname"
-        self.app.push_screen(EditProcedure(proc_name=name), self.save_procedure)
+        self.app.push_screen(EditProcedure(self.ctx, proc_name=name), self.save_procedure)
 
     async def save_procedure(self, proc: ProcedureInfo):
         # TODO: Do I need manage display_name and file name separately?
@@ -88,5 +102,5 @@ class MyApp(App):
         name = proc.display_name
         self.procedure_list.add_option(Option(name, id=name))
         self.procedures[name] = proc
-        config.procedures[name] = proc
-        CONFIG_PATH.write_text(config.model_dump_json(indent=4))
+        self.config.procedures[name] = proc
+        self.config.save_to_path(self.ctx.config_p)

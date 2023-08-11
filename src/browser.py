@@ -1,15 +1,18 @@
+from typing import TYPE_CHECKING
 from playwright.async_api import async_playwright
 
-from .env import HOME_PATH
+if TYPE_CHECKING:
+    from .env import Context
 
 
 class BrowserWrapper:
     # TODO: Context manager? It's easy enough to do, but I don't know if I can
     #       synchronize a context manager to the lifecycle of a textual component
-    async def start(self, url: str | None):
+    async def start(self, ctx: "Context", url: str | None):
         playwright = await async_playwright().start()
         browser = await playwright.chromium.launch(headless=False)
-        self._auth_path = HOME_PATH / "browser_context.json"
+        # TODO: This should use context since it will eventually allow multiple browser contexts
+        self._auth_path = ctx.home_p / "browser_context.json"
         p = self._auth_path
         self.context = await browser.new_context(storage_state=p if p.exists() else None)
 

@@ -7,6 +7,8 @@ from textual.containers import Container, Horizontal
 from textual.screen import Screen
 from textual.widgets import Button, ContentSwitcher, Input, Static
 
+from ..env import Context
+
 from ..browser import BrowserWrapper
 
 
@@ -17,9 +19,19 @@ class Snapshot:
     time: datetime
 
 
-class SnapshotNewProcedure(Screen[list[Snapshot]]):  # type: ignore Pylance hates this, le sigh
+class SnapshotNewProcedure(Screen[list[Snapshot]]):
     snapshots: list[Snapshot]
     browser: BrowserWrapper | None = None
+
+    def __init__(
+        self,
+        ctx: Context,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+    ) -> None:
+        self.ctx = ctx
+        super().__init__(name, id, classes)
 
     def compose(self) -> ComposeResult:
         self.snapshots = []
@@ -56,7 +68,7 @@ class SnapshotNewProcedure(Screen[list[Snapshot]]):  # type: ignore Pylance hate
         self.switch.current = "snapshots"
         self.query_one("#new_snapshot", Button).focus()
         self.browser = BrowserWrapper()
-        await self.browser.start(url)
+        await self.browser.start(self.ctx, url)
         await self.new_snapshot()  # The user most likely wants to keep the first page
 
     async def on_unmount(self):

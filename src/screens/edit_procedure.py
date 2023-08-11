@@ -18,18 +18,19 @@ from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
 from ..browser import BrowserWrapper
-from ..env import DEFAULT_PROCEDURE_SNIPPET, PROCEDURES_DIR, ProcedureInfo
+from ..env import Context, ProcedureInfo
 from ..widgets.editor import Editor
 from .snapshot_new_procedure import Snapshot, SnapshotNewProcedure
 
 
-class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this for some reason
+class EditProcedure(Screen[ProcedureInfo]):
     # TODO: How to share browser without stepping on each other's toes?
     _browser: BrowserWrapper | None = None
     _entries: dict[str, Any] = {}
 
     def __init__(
         self,
+        ctx: Context,
         proc_name: str,
         name: str | None = None,
         id: str | None = None,
@@ -38,17 +39,18 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
         snapshot=False,
     ) -> None:
         super().__init__(name, id, classes)
+        self.ctx = ctx
         self.to_snapshot = snapshot
         self.snapshots = dict[str, Snapshot]()
         self.snapshot_dir = Path(tempfile.gettempdir())
 
-        self.procedure_file = PROCEDURES_DIR / f"{proc_name}.py"
+        self.procedure_file = self.ctx.procedures_dir_p / f"{proc_name}.py"
         if not self.procedure_file.exists():
-            self.procedure_file.write_text(DEFAULT_PROCEDURE_SNIPPET)
+            self.procedure_file.write_text(self.ctx.default_procedure_snippet)
 
     def on_mount(self):
         if self.to_snapshot:
-            self.app.push_screen(SnapshotNewProcedure(), self.receive_snapshots)
+            self.app.push_screen(SnapshotNewProcedure(self.ctx), self.receive_snapshots)
 
     def receive_snapshots(self, snapshots: list[Snapshot]) -> None:
         self.snapshots = {str(index): snap for index, snap in enumerate(snapshots)}
@@ -63,7 +65,7 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
             self.editor = Editor(
                 self.procedure_file,
                 "python",
-                default_contents=DEFAULT_PROCEDURE_SNIPPET,
+                default_contents=self.ctx.default_procedure_snippet,
             )
             yield self.editor
         with ScrollableContainer(id="misc"):
@@ -73,7 +75,7 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
                 yield Button("Run `find()`", id="find")
                 yield Button("Run `process()`", id="process")
                 yield Button("Save procedure", id="save")
-            self.name_label = Static("<PROCEDURE_NAME>")
+            self.name_label = Static(self.procedure_file.stem)
             yield self.name_label
             self.options = SelectionList[str]()
             yield self.options
@@ -95,7 +97,7 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
             return
         self._browser = BrowserWrapper()
         self._browser.context.on("close", self._clear_browser)
-        await self._browser.start(uri)
+        await self._browser.start(self.ctx, uri)
 
     def _clear_browser(self, closed_browser):
         self._browser = None
@@ -106,7 +108,7 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
         with redirect_stdout(output), redirect_stderr(output):
             # TODO: Timeout to catch infinite loops
             module_name = self.procedure_file.stem
-            package = PROCEDURES_DIR.stem
+            package = self.ctx.procedures_dir_p.stem
             module = sys.modules.get(module_name)
 
             imported = False
@@ -128,7 +130,7 @@ class EditProcedure(Screen[ProcedureInfo]):  # type: ignore Pylance hates this f
     async def _browser_wrapper(self):
         if not self._browser:
             self._browser = BrowserWrapper()
-            await self._browser.start(None)
+            await self._browser.start(self.ctx, None)
         return self._browser
 
     @on(Button.Pressed, "#find")
