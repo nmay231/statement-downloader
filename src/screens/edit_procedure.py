@@ -2,7 +2,11 @@ import importlib
 import sys
 import tempfile
 import traceback
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from contextlib import (
+    contextmanager,
+    redirect_stderr,
+    redirect_stdout,
+)
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -13,14 +17,22 @@ from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
 from textual.screen import Screen
 from textual.widget import Widget
-from textual.widgets import Button, OptionList, SelectionList, Static
+from textual.widgets import (
+    Button,
+    OptionList,
+    SelectionList,
+    Static,
+)
 from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
 from ..browser import BrowserWrapper
 from ..env import Context, ProcedureInfo
 from ..widgets.editor import Editor
-from .snapshot_new_procedure import Snapshot, SnapshotNewProcedure
+from .snapshot_new_procedure import (
+    Snapshot,
+    SnapshotNewProcedure,
+)
 
 
 class EditProcedure(Screen[ProcedureInfo]):
@@ -50,7 +62,10 @@ class EditProcedure(Screen[ProcedureInfo]):
 
     def on_mount(self):
         if self.to_snapshot:
-            self.app.push_screen(SnapshotNewProcedure(self.ctx), self.receive_snapshots)
+            self.app.push_screen(
+                SnapshotNewProcedure(self.ctx),
+                self.receive_snapshots,
+            )
 
     def receive_snapshots(self, snapshots: list[Snapshot]) -> None:
         self.snapshots = {str(index): snap for index, snap in enumerate(snapshots)}
@@ -153,7 +168,11 @@ class EditProcedure(Screen[ProcedureInfo]):
             self._entries = {e.id: e for e in entries}
             self.options.add_options(
                 [
-                    Selection(entry.label, entry.id, initial_state=not index)
+                    Selection(
+                        entry.label,
+                        entry.id,
+                        initial_state=not index,
+                    )
                     for index, entry in enumerate(entries)
                 ]
             )

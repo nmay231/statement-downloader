@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING
+
 from playwright.async_api import async_playwright
 
 if TYPE_CHECKING:

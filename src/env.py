@@ -1,6 +1,6 @@
-from functools import cached_property
 import sys
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -22,6 +22,16 @@ class ProcedureInfo(BaseModel):
     display_name: str
 
 
+class ProcedureInfoExt(ProcedureInfo):
+    """Runtime version that also knows whether the procedure file exists"""
+
+    exists: bool
+
+    @staticmethod
+    def from_proc(proc: ProcedureInfo, *, exists: bool) -> "ProcedureInfoExt":
+        return ProcedureInfoExt(display_name=proc.display_name, exists=exists)
+
+
 class BrowserEnum(str, Enum):
     chromium = "chromium"
     firefox = "firefox"
@@ -41,6 +51,22 @@ class Context:
     def __init__(self, config: Config) -> None:
         self._config = config
         sys.path.append(str(self.procedures_dir_p))
+
+        existing_procs = {proc.stem: proc for proc in self.procedures_dir_p.glob("*.py")}
+        if untracked := existing_procs.keys() - self._config.procedures.keys():
+            for proc_name in untracked:
+                # If there is eventually more data to a procedure than its name, I can add a
+                # temp default and have the name say it's <UNTRACKED> or something
+                self._config.procedures[proc_name] = ProcedureInfo(display_name=proc_name)
+            self._config.save_to_path(self.config_p)
+
+        self.all_procedures = dict[str, ProcedureInfoExt]()
+        missing_files = self._config.procedures.keys() - existing_procs.keys()
+        for name, proc in self._config.procedures.items():
+            self.all_procedures[name] = ProcedureInfoExt.from_proc(
+                proc,
+                exists=name not in missing_files,
+            )
 
     @cached_property
     def default_procedure_snippet(self):

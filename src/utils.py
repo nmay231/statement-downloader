@@ -1,5 +1,9 @@
 import sys
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from contextlib import (
+    contextmanager,
+    redirect_stderr,
+    redirect_stdout,
+)
 from typing import Iterator
 
 from textual.app import App

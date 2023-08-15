@@ -5,11 +5,15 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
-from textual.widgets import Button, ContentSwitcher, Input, Static
-
-from ..env import Context
+from textual.widgets import (
+    Button,
+    ContentSwitcher,
+    Input,
+    Static,
+)
 
 from ..browser import BrowserWrapper
+from ..env import Context
 
 
 @dataclass
