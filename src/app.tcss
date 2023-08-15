@@ -42,3 +42,21 @@ NewProcedure #debug_output {
     border-title-align: center;
     border: solid $accent;
 }
+
+
+ConfirmDialog {
+    align: center middle;
+}
+
+ConfirmDialog > Widget {
+    align: center middle;
+    padding: 1 2;
+    height: auto;
+    width: auto;
+}
+
+# I can't get the stupid buttons to be aligned, arg!
+ConfirmDialog > Widget > * {
+    width: auto;
+    align-horizontal: center;
+}

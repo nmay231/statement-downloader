@@ -2,11 +2,7 @@ import importlib
 import sys
 import tempfile
 import traceback
-from contextlib import (
-    contextmanager,
-    redirect_stderr,
-    redirect_stdout,
-)
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -17,22 +13,14 @@ from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
 from textual.screen import Screen
 from textual.widget import Widget
-from textual.widgets import (
-    Button,
-    OptionList,
-    SelectionList,
-    Static,
-)
+from textual.widgets import Button, OptionList, SelectionList, Static
 from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
 from ..browser import BrowserWrapper
 from ..env import Context, ProcedureInfo
 from ..widgets.editor import Editor
-from .snapshot_new_procedure import (
-    Snapshot,
-    SnapshotNewProcedure,
-)
+from .snapshot_new_procedure import Snapshot, SnapshotNewProcedure
 
 
 class EditProcedure(Screen[ProcedureInfo]):
@@ -204,4 +192,4 @@ class EditProcedure(Screen[ProcedureInfo]):
     async def save_procedure(self):
         if self._browser:
             await self._browser.cleanup()
-        self.dismiss(ProcedureInfo(display_name=self.procedure_file.stem))
+        self.dismiss(ProcedureInfo(name=self.procedure_file.stem, exists=True))

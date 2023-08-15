@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class Config(BaseModel):
-    procedures: dict[str, "ProcedureInfo"] = Field(default_factory=dict)
+    procedures: dict[str, "ProcedureInfoConfigOnly"] = Field(default_factory=dict)
     contexts: dict[str, "ContextInfo"] = Field(default_factory=dict)
 
     @classmethod
@@ -18,18 +18,23 @@ class Config(BaseModel):
         path.write_text(self.model_dump_json(indent=4))
 
 
-class ProcedureInfo(BaseModel):
-    display_name: str
+class ProcedureInfoConfigOnly(BaseModel):
+    ...
 
 
-class ProcedureInfoExt(ProcedureInfo):
-    """Runtime version that also knows whether the procedure file exists"""
+class ProcedureInfo(ProcedureInfoConfigOnly):
+    """Runtime version that has more information"""
 
+    name: str
+    "Both the filename and display name"
     exists: bool
+    "Whether the file exists or not"
 
     @staticmethod
-    def from_proc(proc: ProcedureInfo, *, exists: bool) -> "ProcedureInfoExt":
-        return ProcedureInfoExt(display_name=proc.display_name, exists=exists)
+    def from_proc(
+        _proc: ProcedureInfoConfigOnly, *, name: str, exists: bool
+    ) -> "ProcedureInfo":
+        return ProcedureInfo(name=name, exists=exists)
 
 
 class BrowserEnum(str, Enum):
@@ -55,16 +60,17 @@ class Context:
         existing_procs = {proc.stem: proc for proc in self.procedures_dir_p.glob("*.py")}
         if untracked := existing_procs.keys() - self._config.procedures.keys():
             for proc_name in untracked:
-                # If there is eventually more data to a procedure than its name, I can add a
-                # temp default and have the name say it's <UNTRACKED> or something
-                self._config.procedures[proc_name] = ProcedureInfo(display_name=proc_name)
+                # When there is more data about a procedure, like which browser context to use,
+                # I will use the defaults and have the name say it's <UNTRACKED> or something
+                self._config.procedures[proc_name] = ProcedureInfoConfigOnly()
             self._config.save_to_path(self.config_p)
 
-        self.all_procedures = dict[str, ProcedureInfoExt]()
+        self.all_procedures = dict[str, ProcedureInfo]()
         missing_files = self._config.procedures.keys() - existing_procs.keys()
         for name, proc in self._config.procedures.items():
-            self.all_procedures[name] = ProcedureInfoExt.from_proc(
+            self.all_procedures[name] = ProcedureInfo.from_proc(
                 proc,
+                name=name,
                 exists=name not in missing_files,
             )
 
