@@ -11,6 +11,10 @@
     margin: 1 2;
 }
 
+.button-row > .button-row-spacing {
+    width: auto;
+}
+
 Editor {
     padding: 1 2;
 }

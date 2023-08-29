@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
@@ -19,7 +20,8 @@ class Config(BaseModel):
 
 
 class ProcedureInfoConfigOnly(BaseModel):
-    ...
+    snapshots: list["Snapshot"]
+    "A list of snapshots a user can quickly switch between while developing"
 
 
 class ProcedureInfo(ProcedureInfoConfigOnly):
@@ -27,25 +29,39 @@ class ProcedureInfo(ProcedureInfoConfigOnly):
 
     name: str
     "Both the filename and display name"
-    exists: bool
-    "Whether the file exists or not"
 
     @staticmethod
-    def from_proc(
-        _proc: ProcedureInfoConfigOnly, *, name: str, exists: bool
-    ) -> "ProcedureInfo":
-        return ProcedureInfo(name=name, exists=exists)
+    def from_proc(proc: ProcedureInfoConfigOnly, *, name: str) -> "ProcedureInfo":
+        return ProcedureInfo(name=name, snapshots=proc.snapshots)
+
+    def exists(self, ctx: "Context") -> bool:
+        """True if the procedure file exists"""
+        return (ctx.procedures_dir_p / f"{self.name}.py").exists()
+
+
+class Snapshot(BaseModel):
+    uri: str
+    "A url or sometimes a uri with `file://` schema to point to a local snapshot of the site"
+    # TODO: would time.delta be better?
+    time: datetime = Field(default_factory=datetime.now)
+    "An approximate time the snapshot was taken. Mostly for the user's reference."
+
+    @property
+    def file_name(self) -> Path | None:
+        """Return the file path if the uri uses the `file://` schema. None otherwise."""
+        if self.uri.startswith("file://"):
+            return Path(self.uri[7:])
+
+
+class ContextInfo(BaseModel):
+    display_name: str
+    browser: "BrowserEnum"
 
 
 class BrowserEnum(str, Enum):
     chromium = "chromium"
     firefox = "firefox"
     webkit = "webkit"
-
-
-class ContextInfo(BaseModel):
-    display_name: str
-    browser: BrowserEnum
 
 
 class Context:
@@ -57,22 +73,32 @@ class Context:
         self._config = config
         sys.path.append(str(self.procedures_dir_p))
 
+        save_to_disk = False
         existing_procs = {proc.stem: proc for proc in self.procedures_dir_p.glob("*.py")}
         if untracked := existing_procs.keys() - self._config.procedures.keys():
+            save_to_disk = True
             for proc_name in untracked:
                 # When there is more data about a procedure, like which browser context to use,
                 # I will use the defaults and have the name say it's <UNTRACKED> or something
-                self._config.procedures[proc_name] = ProcedureInfoConfigOnly()
-            self._config.save_to_path(self.config_p)
+                self._config.procedures[proc_name] = ProcedureInfoConfigOnly(snapshots=[])
 
         self.all_procedures = dict[str, ProcedureInfo]()
-        missing_files = self._config.procedures.keys() - existing_procs.keys()
         for name, proc in self._config.procedures.items():
-            self.all_procedures[name] = ProcedureInfo.from_proc(
-                proc,
-                name=name,
-                exists=name not in missing_files,
-            )
+            # TODO: Technically, there is also the issue where a file exists that is not
+            # TODO: tracked by the config (similar to procedure files), but that is less
+            # TODO: of a concern here since the directory will probably be deleted anyways
+            len_before_filter = len(proc.snapshots)
+            proc.snapshots = [
+                snap
+                for snap in proc.snapshots
+                # Filter out static snapshots that no longer exist
+                if snap.file_name is None or snap.file_name.exists()
+            ]
+            self.all_procedures[name] = ProcedureInfo.from_proc(proc, name=name)
+            save_to_disk = save_to_disk or len_before_filter > len(proc.snapshots)
+
+        if save_to_disk:
+            self._config.save_to_path(self.config_p)
 
     @cached_property
     def default_procedure_snippet(self):

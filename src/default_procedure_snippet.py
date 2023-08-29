@@ -13,6 +13,8 @@ class Entry:
 
 async def find(browser: Browser, page: Page) -> list[Entry]:
     """Return a list of entries that will be presented in a feed"""
+    # TODO: Put this into an explicit init() function
+    # await page.goto("{initial_url}")
     print("finding in page...")
     return [Entry("id_text", "Displayed label")]
 

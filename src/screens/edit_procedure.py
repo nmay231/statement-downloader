@@ -1,8 +1,9 @@
 import importlib
 import sys
-import tempfile
 import traceback
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from copy import deepcopy
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -18,50 +19,40 @@ from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
 from ..browser import BrowserWrapper
-from ..env import Context, ProcedureInfo
+from ..env import Context, ProcedureInfo, Snapshot
 from ..widgets.editor import Editor
-from .snapshot_new_procedure import Snapshot, SnapshotNewProcedure
 
 
 class EditProcedure(Screen[ProcedureInfo]):
-    # TODO: How to share browser without stepping on each other's toes?
-    _browser: BrowserWrapper | None = None
     _entries: dict[str, Any] = {}
 
     def __init__(
         self,
         ctx: Context,
-        proc_name: str,
+        proc: ProcedureInfo,
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
-        *,
-        snapshot=False,
     ) -> None:
         super().__init__(name, id, classes)
+        self.proc = deepcopy(proc)
         self.ctx = ctx
-        self.to_snapshot = snapshot
-        self.snapshots = dict[str, Snapshot]()
-        self.snapshot_dir = Path(tempfile.gettempdir())
+        # TODO: More robust yet still consistent filename
+        self.snapshot_dir = Path(f"/tmp/state_dl/{proc.name}")
+        self.snapshot_dir.mkdir(parents=True, exist_ok=True)
 
-        self.procedure_file = self.ctx.procedures_dir_p / f"{proc_name}.py"
         if not self.procedure_file.exists():
-            self.procedure_file.write_text(self.ctx.default_procedure_snippet)
-
-    def on_mount(self):
-        if self.to_snapshot:
-            self.app.push_screen(
-                SnapshotNewProcedure(self.ctx),
-                self.receive_snapshots,
+            self.procedure_file.write_text(
+                self.ctx.default_procedure_snippet.format(initial_url=self.initial_url)
             )
 
-    def receive_snapshots(self, snapshots: list[Snapshot]) -> None:
-        self.snapshots = {str(index): snap for index, snap in enumerate(snapshots)}
-        for id, snap in self.snapshots.items():
-            self.snapshot_list.add_option(Option(snap.url, id=id))
-            # TODO: File permissions so random things cannot access it.
-            path = self.snapshot_dir / f"{id}.html"
-            path.write_text(snap.html_content)
+    @property
+    def procedure_file(self):
+        return self.ctx.procedures_dir_p / f"{self.proc.name}.py"
+
+    @property
+    def initial_url(self):
+        return self.proc.snapshots[0].uri if self.proc.snapshots else "https://example.com"
 
     def compose(self) -> ComposeResult:
         with ScrollableContainer(id="editor"):
@@ -73,10 +64,15 @@ class EditProcedure(Screen[ProcedureInfo]):
             yield self.editor
         with ScrollableContainer(id="misc"):
             self.snapshot_list = OptionList(id="snapshot_list")
+            self.snapshot_list.border_title = "Snapshots"
             yield self.snapshot_list
             with Widget(classes="button-row"):
                 yield Button("Run `find()`", id="find")
                 yield Button("Run `process()`", id="process")
+                yield Static(classes="button-row-spacing")
+                yield Button("Live snapshot", id="snapshot-live")
+                yield Button("Static snapshot", id="snapshot-static")
+                yield Static(classes="button-row-spacing")
                 yield Button("Save procedure", id="save")
             self.name_label = Static(self.procedure_file.stem)
             yield self.name_label
@@ -87,22 +83,32 @@ class EditProcedure(Screen[ProcedureInfo]):
             self.output = Static()
             yield self.output
 
+    def on_mount(self) -> None:
+        for snap in self.proc.snapshots:
+            self.snapshot_list.add_option(Option(f"[i]{snap.time}[/] [b]{snap.uri}[/]"))
+
     @on(OptionList.OptionSelected, "#snapshot_list")
     async def snapshot_list_selected(self, selected: OptionList.OptionSelected) -> None:
-        if selected.option_id not in self.snapshots:
-            raise KeyError
-        path = self.snapshot_dir / f"{selected.option_id}.html"
-        await self.browser_visit(f"file://{path}")
+        await self.get_browser(self.proc.snapshots[selected.option_index].uri)
 
-    async def browser_visit(self, uri: str) -> None:
+    # TODO: Move browser to .env.Context()
+    _browser: BrowserWrapper | None = None
+
+    async def get_browser(self, url: str | None = None) -> BrowserWrapper:
         if self._browser is not None:
-            await self._browser.page.goto(uri)
-            return
-        self._browser = BrowserWrapper()
+            if url:
+                await self._browser.page.goto(url)
+            return self._browser
+        # TODO: Have run_find() and run_process() call proc_module.init() to goto(initial_url)
+        self._browser = await BrowserWrapper.init(
+            ctx=self.ctx, initial_url=url or self.initial_url
+        )
         self._browser.context.on("close", self._clear_browser)
-        await self._browser.start(self.ctx, uri)
+        return self._browser
 
-    def _clear_browser(self, closed_browser):
+    async def _clear_browser(self, _closed_browser):
+        assert self._browser
+        await self._browser.cleanup()
         self._browser = None
 
     @contextmanager
@@ -130,11 +136,15 @@ class EditProcedure(Screen[ProcedureInfo]):
         output.seek(0)
         self.output.update(escape(output.read()))
 
-    async def _browser_wrapper(self):
-        if not self._browser:
-            self._browser = BrowserWrapper()
-            await self._browser.start(self.ctx, None)
-        return self._browser
+    @contextmanager
+    def _set_status(self, status: str, end_status: str | None = None):
+        self.name_label.update(f"{self.procedure_file.stem} <{status}>")
+        yield
+        # TODO: How to restore to the previous name_label.content?
+        if not end_status:
+            self.name_label.update(self.procedure_file.stem)
+        else:
+            self.name_label.update(f"{self.procedure_file.stem} <{end_status}>")
 
     @on(Button.Pressed, "#find")
     async def run_find(self):
@@ -142,11 +152,10 @@ class EditProcedure(Screen[ProcedureInfo]):
 
     @work
     async def _run_find(self):
-        self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
-        with self._import_procedure() as module:
+        with self._import_procedure() as module, self._set_status("PENDING"):
             if not module:
                 return
-            wrapper = await self._browser_wrapper()
+            wrapper = await self.get_browser()
             browser = wrapper.context
             page = wrapper.page
 
@@ -164,7 +173,6 @@ class EditProcedure(Screen[ProcedureInfo]):
                     for index, entry in enumerate(entries)
                 ]
             )
-        self.name_label.update(self.procedure_file.stem)
 
     @on(Button.Pressed, "#process")
     async def run_process(self):
@@ -176,20 +184,36 @@ class EditProcedure(Screen[ProcedureInfo]):
             self.output.update("Run [bold]find()[/] first, and ensure something's returned")
             return
 
-        self.name_label.update(f"{self.procedure_file.stem} <PENDING>")
-        with self._import_procedure() as module:
+        with self._import_procedure() as module, self._set_status("PENDING", "FINISHED"):
             if not module:
                 return
-            wrapper = await self._browser_wrapper()
+            wrapper = await self.get_browser()
             browser = wrapper.context
             page = wrapper.page
 
             entries = [self._entries[id] for id in self.options.selected]
             await module.process(browser, page, entries)
-        self.name_label.update(f"{self.procedure_file.stem} <FINISHED>")
 
     @on(Button.Pressed, "#save")
     async def save_procedure(self):
         if self._browser:
             await self._browser.cleanup()
-        self.dismiss(ProcedureInfo(name=self.procedure_file.stem, exists=True))
+        self.dismiss(self.proc)
+
+    @on(Button.Pressed, "#snapshot-live")
+    async def live_snapshot(self):
+        browser = await self.get_browser()
+        snap = Snapshot(uri=browser.page.url)
+        self.proc.snapshots.append(snap)
+        self.snapshot_list.add_option(Option(f"[i]{snap.time}[/] [b]{snap.uri}[/]"))
+
+    @on(Button.Pressed, "#snapshot-static")
+    async def snapshot_static(self):
+        browser = await self.get_browser()
+        content = await browser.page.content()
+        now = datetime.now()
+        path = self.snapshot_dir / f"{now}.html"
+        path.write_text(content)
+        snap = Snapshot(uri=f"file://{path}", time=now)
+        self.proc.snapshots.append(snap)
+        self.snapshot_list.add_option(Option(f"[i]{snap.time}[/] [b]{snap.uri}[/]"))
