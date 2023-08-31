@@ -156,11 +156,9 @@ class EditProcedure(Screen[ProcedureInfo]):
             if not module:
                 return
             wrapper = await self.get_browser()
-            browser = wrapper.context
-            page = wrapper.page
 
             self.options.clear_options()
-            entries = await module.find(browser, page)
+            entries = await module.find(wrapper.page)
             assert isinstance(entries, list), "expected `find()` to return list[Entry]"
             self._entries = {e.id: e for e in entries}
             self.options.add_options(
@@ -188,11 +186,9 @@ class EditProcedure(Screen[ProcedureInfo]):
             if not module:
                 return
             wrapper = await self.get_browser()
-            browser = wrapper.context
-            page = wrapper.page
 
             entries = [self._entries[id] for id in self.options.selected]
-            await module.process(browser, page, entries)
+            await module.process(wrapper.page, entries)
 
     @on(Button.Pressed, "#save")
     async def save_procedure(self):
