@@ -29,21 +29,24 @@ Editor #eof {
     text-align: center;
 }
 
-NewProcedure {
+EditProcedure {
     height: 100%
 }
 
-NewProcedure #editor {
+EditProcedure #editor {
     height: 3fr;
 }
 
-NewProcedure #misc {
+EditProcedure #misc {
     height: 4fr;
 }
 
-NewProcedure #debug_output {
+EditProcedure #misc OptionList {
+    border: solid $accent;
+}
+
+EditProcedure #debug_output {
     height: 3fr;
-    border-title-align: center;
     border: solid $accent;
 }
 

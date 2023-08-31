@@ -64,7 +64,7 @@ class EditProcedure(Screen[ProcedureInfo]):
             yield self.editor
         with ScrollableContainer(id="misc"):
             self.snapshot_list = OptionList(id="snapshot_list")
-            self.snapshot_list.border_title = "Snapshots"
+            self.snapshot_list.border_title = "URL Snapshots"
             yield self.snapshot_list
             with Widget(classes="button-row"):
                 yield Button("Run `find()`", id="find")
@@ -77,6 +77,7 @@ class EditProcedure(Screen[ProcedureInfo]):
             self.name_label = Static(self.procedure_file.stem)
             yield self.name_label
             self.options = SelectionList[str]()
+            self.options.border_title = "Entries"
             yield self.options
         with ScrollableContainer(id="debug_output") as container:
             container.border_title = "Debug Output (stdout/stderr)"
