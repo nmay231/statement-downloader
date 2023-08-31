@@ -24,6 +24,9 @@ class ConfirmDialog(ModalScreen[bool]):
                 yield Button("Okay", id="okay")
                 yield Button("Cancel", id="cancel")
 
+    def on_mount(self) -> None:
+        self.query_one("#cancel", Button).focus()
+
     @on(Button.Pressed, "#okay")
     def okay(self):
         self.dismiss(True)
