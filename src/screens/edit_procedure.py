@@ -102,14 +102,14 @@ class EditProcedure(Screen[ProcedureInfo]):
             return self._browser
         # TODO: Have run_find() and run_process() call proc_module.init() to goto(initial_url)
         self._browser = await BrowserWrapper.init(
-            ctx=self.ctx, initial_url=url or self.initial_url
+            ctx=self.ctx,
+            initial_url=url or self.initial_url,
+            on_close=self._clear_browser,
         )
-        self._browser.context.on("close", self._clear_browser)
         return self._browser
 
-    async def _clear_browser(self, _closed_browser):
+    async def _clear_browser(self):
         assert self._browser
-        await self._browser.cleanup()
         self._browser = None
 
     @contextmanager
@@ -194,7 +194,8 @@ class EditProcedure(Screen[ProcedureInfo]):
     @on(Button.Pressed, "#save")
     async def save_procedure(self):
         if self._browser:
-            await self._browser.cleanup()
+            await self._browser.context.close()
+            assert self._browser is None, "self._clear_browser callback should have run"
         self.dismiss(self.proc)
 
     @on(Button.Pressed, "#snapshot-live")
