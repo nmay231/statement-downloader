@@ -90,7 +90,14 @@ class EditProcedure(Screen[ProcedureInfo]):
 
     @on(OptionList.OptionSelected, "#snapshot_list")
     async def snapshot_list_selected(self, selected: OptionList.OptionSelected) -> None:
-        await self.get_browser(self.proc.snapshots[selected.option_index].uri)
+        self._browser_goto(self.proc.snapshots[selected.option_index].uri)
+
+    @work
+    async def _browser_goto(self, uri: str):
+        """Wrapped in a worker since launching a browser the
+        first time can exceed a message-handler timeout
+        """
+        await self.get_browser(uri)
 
     # TODO: Move browser to .env.Context()
     _browser: BrowserWrapper | None = None
