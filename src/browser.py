@@ -23,7 +23,7 @@ class BrowserWrapper:
 
     async def _start(self, ctx: "Context", url: str | None) -> None:
         playwright = await async_playwright().start()
-        browser = await playwright.chromium.launch(headless=False)
+        browser = await playwright.chromium.launch(headless=False, timeout=15000)
 
         # TODO: Use contexts listed in ctx
         self._auth_path = ctx.home_p / "browser_context.json"
