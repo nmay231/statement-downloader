@@ -57,8 +57,8 @@ class EditProcedure(Screen[ProcedureInfo]):
     def compose(self) -> ComposeResult:
         with ScrollableContainer(id="editor"):
             self.editor = Editor(
+                self.ctx,
                 self.procedure_file,
-                "python",
                 default_contents=self.ctx.default_procedure_snippet,
             )
             yield self.editor

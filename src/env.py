@@ -1,3 +1,4 @@
+import os
 import sys
 from datetime import datetime
 from enum import Enum
@@ -8,11 +9,19 @@ from pydantic import BaseModel, Field
 
 
 class Config(BaseModel):
-    procedures: dict[str, "ProcedureInfoConfigOnly"] = Field(default_factory=dict)
+    edit_file: str | None = None
+    """Command to edit file in the format `/path/to/editor --optional-params "{file}"`
+    (the `"{file}"` is literal and filled at runtime)"""
+    editor_in_terminal: bool = True
+    "Does the editor take control of the terminal (e.g. vim)"
     contexts: dict[str, "ContextInfo"] = Field(default_factory=dict)
+    "Browser contexts (cookies, localStorage, etc.)"
+    procedures: dict[str, "ProcedureInfoConfigOnly"] = Field(default_factory=dict)
+    "User procedures"
 
     @classmethod
     def load_from_path(cls, path: Path) -> "Config":
+        # TODO: Provide defaults if file doesn't exist?
         return cls.model_validate_json(path.read_text())
 
     def save_to_path(self, path: Path) -> None:
@@ -73,7 +82,16 @@ class Context:
         self._config = config
         sys.path.append(str(self.procedures_dir_p))
 
+        self.editor_in_terminal = config.editor_in_terminal
+
+        if self._config.edit_file:
+            self.edit_file = self._config.edit_file
+        else:
+            editor = os.environ["VISUAL"] or os.environ["EDITOR"] or "/bin/nano"
+            self.edit_file = editor + ' "{file}"'
+
         save_to_disk = False
+
         existing_procs = {proc.stem: proc for proc in self.procedures_dir_p.glob("*.py")}
         if untracked := existing_procs.keys() - self._config.procedures.keys():
             save_to_disk = True
