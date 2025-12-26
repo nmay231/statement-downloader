@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import sys
 import traceback
@@ -74,6 +75,8 @@ class EditProcedure(Screen[ProcedureInfo]):
                 yield Button("Static snapshot", id="snapshot-static")
                 yield Static(classes="button-row-spacing")
                 yield Button("Save procedure", id="save")
+                yield Static(classes="button-row-spacing")
+                yield Button("Toggle Entry selection", id="toggle-entries")
             self.name_label = Static(self.procedure_file.stem)
             yield self.name_label
             self.options = SelectionList[str]()
@@ -157,19 +160,32 @@ class EditProcedure(Screen[ProcedureInfo]):
         else:
             self.name_label.update(f"{self.procedure_file.stem} <{end_status}>")
 
+    @on(Button.Pressed, "#toggle-entries")
+    async def toggle_entries(self):
+        if len(self.options.selected) < self.options.option_count:
+            self.options.select_all()
+        else:
+            self.options.deselect_all()
+
     @on(Button.Pressed, "#find")
     async def run_find(self):
         self._run_find()
 
     @work
     async def _run_find(self):
-        with self._import_procedure() as module, self._set_status("PENDING"):
+        with self._import_procedure() as module, self._set_status(
+            "PENDING", end_status="find() FINISHED"
+        ):
             if not module:
                 return
             wrapper = await self.get_browser()
 
             self.options.clear_options()
-            entries = await module.find(wrapper.page)
+            try:
+                entries = await asyncio.wait_for(module.find(wrapper.page), timeout=30)
+            except asyncio.TimeoutError:
+                return
+
             assert isinstance(entries, list), "expected `find()` to return list[Entry]"
             self._entries = {e.id: e for e in entries}
             self.options.add_options(

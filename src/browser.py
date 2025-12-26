@@ -29,6 +29,7 @@ class BrowserWrapper:
         self._auth_path = ctx.home_p / "browser_context.json"
         ss = self._auth_path if self._auth_path.exists() else None
         self.context = await browser.new_context(storage_state=ss)
+        self.context.set_default_timeout(0)
         if not ss:
             await self.context.storage_state(path=self._auth_path)
 
